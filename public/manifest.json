@@ -1,0 +1,22 @@
+{
+	"theme_color": "#000000",
+	"background_color": "#000000",
+	"display": "standalone",
+	"scope": "/",
+	"start_url": "/",
+	"name": "SupaDao",
+	"short_name": "SupaStake",
+	"description": "A Progressive Web App for staking SupaCoin Token a native for SupaDao.",
+	"icons": [
+		{
+			"src": "/supadao-logo.png",
+			"sizes": "192x192",
+			"type": "image/png"
+		},
+		{
+			"src": "/supadao-logo.png",
+			"sizes": "512x512",
+			"type": "image/png"
+		}
+	]
+}
