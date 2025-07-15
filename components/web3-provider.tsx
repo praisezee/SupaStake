@@ -1,370 +1,240 @@
 "use client";
 
 import {
-	createContext,
-	useContext,
-	useState,
-	useEffect,
-	type ReactNode,
-} from "react";
-
-// Extend the Window interface to include ethereum
-declare global {
-	interface Window {
-		ethereum?: any;
-	}
-}
-import { ethers } from "ethers";
+	useAccount,
+	useReadContract,
+	useWriteContract,
+	useWaitForTransactionReceipt,
+} from "wagmi";
 import { useToast } from "@/hooks/use-toast";
 import {
 	CONTRACT_ADDRESS,
 	SPC_TOKEN_ADDRESS,
 	STAKING_ABI,
 	SPC_TOKEN_ABI,
-	MONAD_CHAIN_ID,
-	MONAD_RPC_URL,
 } from "@/lib/contract";
+import { parseEther, formatEther } from "viem";
 
-interface Web3ContextType {
-	isConnected: boolean;
-	account: string | null;
-	balance: string;
-	isOnMonad: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-	stakeTokens: (amount: string, duration: string) => Promise<boolean>;
-	unstakeTokens: (positionId: string) => Promise<boolean>;
-	claimRewards: () => Promise<boolean>;
-	getUserPositions: () => Promise<any[]>;
-	getPendingRewards: () => Promise<string>;
-	switchToMonad: () => Promise<void>;
-}
-
-const Web3Context = createContext<Web3ContextType | undefined>(undefined);
-
-export function Web3Provider({ children }: { children: ReactNode }) {
-	const [isConnected, setIsConnected] = useState(false);
-	const [account, setAccount] = useState<string | null>(null);
-	const [balance, setBalance] = useState("0");
-	const [isOnMonad, setIsOnMonad] = useState(false);
+export function useWeb3() {
+	const { address, isConnected } = useAccount();
 	const { toast } = useToast();
+	const { writeContractAsync, data: hash, isPending } = useWriteContract();
+	const { isLoading: isConfirming } = useWaitForTransactionReceipt({
+		hash,
+	});
 
-	const checkNetwork = async () => {
-		if (typeof window !== "undefined" && window.ethereum) {
-			try {
-				const chainId = await window.ethereum.request({ method: "eth_chainId" });
-				const isCorrectNetwork = Number.parseInt(chainId, 16) === MONAD_CHAIN_ID;
-				setIsOnMonad(isCorrectNetwork);
-				return isCorrectNetwork;
-			} catch (error) {
-				console.error("Error checking network:", error);
-				return false;
-			}
+	// Get SPC token balance
+	const { data: balance } = useReadContract({
+		address: SPC_TOKEN_ADDRESS,
+		abi: SPC_TOKEN_ABI,
+		functionName: "balanceOf",
+		args: address ? [address] : undefined,
+		query: {
+			enabled: !!address,
+		},
+	});
+
+	// Get user positions
+	const { data: userPositionIds, refetch: refetchPositionIds } = useReadContract(
+		{
+			address: CONTRACT_ADDRESS,
+			abi: STAKING_ABI,
+			functionName: "userPositions",
+			args: address ? [address] : undefined,
+			query: {
+				enabled: !!address,
+			},
 		}
-		return false;
-	};
+	);
 
-	const switchToMonad = async () => {
-		if (typeof window !== "undefined" && window.ethereum) {
-			try {
-				await window.ethereum.request({
-					method: "wallet_switchEthereumChain",
-					params: [{ chainId: `0x${MONAD_CHAIN_ID.toString(16)}` }],
-				});
-			} catch (switchError: any) {
-				if (switchError.code === 4902) {
-					try {
-						await window.ethereum.request({
-							method: "wallet_addEthereumChain",
-							params: [
-								{
-									chainId: `0x${MONAD_CHAIN_ID.toString(16)}`,
-									chainName: "Monad Testnet",
-									nativeCurrency: {
-										name: "MON",
-										symbol: "MON",
-										decimals: 18,
-									},
-									rpcUrls: [MONAD_RPC_URL],
-									blockExplorerUrls: ["https://testnet-explorer.monad.xyz"],
-								},
-							],
-						});
-					} catch (addError) {
-						console.error("Error adding Monad network:", addError);
-						toast({
-							title: "Network Error",
-							description: "Failed to add Monad network",
-							variant: "destructive",
-						});
-					}
-				}
-			}
-		}
-	};
+	const { data: positions, refetch: refetchPositions } = useReadContract({
+		address: CONTRACT_ADDRESS,
+		abi: STAKING_ABI,
+		functionName: "getPosition",
+		args: address ? [address] : undefined,
+		query: {
+			enabled: !!address,
+		},
+	});
 
-	const connect = async () => {
-		if (typeof window !== "undefined" && window.ethereum) {
-			try {
-				const accounts = await window.ethereum.request({
-					method: "eth_requestAccounts",
-				});
-
-				if (accounts.length > 0) {
-					setAccount(accounts[0]);
-					setIsConnected(true);
-
-					const networkCheck = await checkNetwork();
-					if (!networkCheck) {
-						toast({
-							title: "Wrong Network",
-							description: "Please switch to Monad network to continue",
-							variant: "destructive",
-						});
-						await switchToMonad();
-					}
-
-					await updateBalance(accounts[0]);
-
-					toast({
-						title: "Wallet Connected",
-						description: "Successfully connected to your wallet",
-					});
-				}
-			} catch (error) {
-				console.error("Error connecting wallet:", error);
-				toast({
-					title: "Connection Failed",
-					description: "Failed to connect wallet",
-					variant: "destructive",
-				});
-			}
-		} else {
-			toast({
-				title: "No Wallet Found",
-				description: "Please install MetaMask or another Web3 wallet",
-				variant: "destructive",
-			});
-		}
-	};
-
-	const disconnect = () => {
-		setIsConnected(false);
-		setAccount(null);
-		setBalance("0");
-		setIsOnMonad(false);
-		toast({
-			title: "Wallet Disconnected",
-			description: "Your wallet has been disconnected",
-		});
-	};
-
-	const updateBalance = async (address: string) => {
-		if (typeof window !== "undefined" && window.ethereum) {
-			try {
-				const provider = new ethers.BrowserProvider(window.ethereum);
-				const contract = new ethers.Contract(
-					SPC_TOKEN_ADDRESS,
-					SPC_TOKEN_ABI,
-					provider
-				);
-				const balance = await contract.balanceOf(address);
-				setBalance(ethers.formatEther(balance));
-			} catch (error) {
-				console.error("Error fetching balance:", error);
-			}
-		}
-	};
+	// Get pending rewards
+	const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
+		address: CONTRACT_ADDRESS,
+		abi: STAKING_ABI,
+		functionName: "pendingRewards",
+		args: address ? [address] : undefined,
+		query: {
+			enabled: !!address,
+		},
+	});
 
 	const stakeTokens = async (
 		amount: string,
 		duration: string
 	): Promise<boolean> => {
-		if (!isConnected || !account) return false;
+		if (!isConnected || !address) {
+			toast({
+				title: "Wallet Not Connected",
+				description: "Please connect your wallet to stake tokens.",
+				variant: "destructive",
+			});
+			return false;
+		}
 
 		try {
-			const provider = new ethers.BrowserProvider(window.ethereum);
-			const signer = await provider.getSigner();
+			const amountWei = parseEther(amount);
+			const durationSeconds = BigInt(Number(duration) * 24 * 60 * 60); // Convert days to seconds
 
 			// First approve the staking contract
-			const tokenContract = new ethers.Contract(
-				SPC_TOKEN_ADDRESS,
-				SPC_TOKEN_ABI,
-				signer
-			);
-			const amountWei = ethers.parseEther(amount);
+			const hash = await writeContractAsync({
+				address: SPC_TOKEN_ADDRESS,
+				abi: SPC_TOKEN_ABI,
+				functionName: "approve",
+				args: [CONTRACT_ADDRESS, amountWei],
+			});
 
-			const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, amountWei);
-			await approveTx.wait();
+			// Wait for approval confirmation
+			if (hash) {
+				// Then stake
+				await writeContractAsync({
+					address: CONTRACT_ADDRESS,
+					abi: STAKING_ABI,
+					functionName: "stake",
+					args: [amountWei, durationSeconds],
+				});
 
-			// Then stake
-			const stakingContract = new ethers.Contract(
-				CONTRACT_ADDRESS,
-				STAKING_ABI,
-				signer
-			);
-			const stakeTx = await stakingContract.stake(amountWei, duration);
-			await stakeTx.wait();
+				toast({
+					title: "Staking Successful!",
+					description: `Successfully staked ${amount} SPC tokens.`,
+				});
+			} else {
+				toast({
+					title: "Staking Failed",
+					description: "An error occurred while staking.",
+					variant: "destructive",
+				});
+			}
 
-			await updateBalance(account);
+			// Refetch data
+			refetchPositionIds();
+			refetchPositions();
+			refetchRewards();
+
 			return true;
-		} catch (error) {
-			console.error("Error staking tokens:", error);
+		} catch (error: any) {
+			console.error("Staking error:", error);
+			toast({
+				title: "Staking Failed",
+				description: error.message || "An error occurred while staking.",
+				variant: "destructive",
+			});
 			return false;
 		}
 	};
 
 	const unstakeTokens = async (positionId: string): Promise<boolean> => {
-		if (!isConnected || !account) return false;
+		if (!isConnected || !address) return false;
 
 		try {
-			const provider = new ethers.BrowserProvider(window.ethereum);
-			const signer = await provider.getSigner();
-			const contract = new ethers.Contract(CONTRACT_ADDRESS, STAKING_ABI, signer);
+			await writeContractAsync({
+				address: CONTRACT_ADDRESS,
+				abi: STAKING_ABI,
+				functionName: "unstake",
+				args: [BigInt(positionId)],
+			});
 
-			const tx = await contract.unstake(positionId);
-			await tx.wait();
+			toast({
+				title: "Unstaking Successful!",
+				description: "Your tokens have been unstaked.",
+			});
 
-			await updateBalance(account);
+			// Refetch data
+			refetchPositionIds();
+			refetchPositions();
+			refetchRewards();
+
 			return true;
-		} catch (error) {
-			console.error("Error unstaking tokens:", error);
+		} catch (error: any) {
+			console.error("Unstaking error:", error);
+			toast({
+				title: "Unstaking Failed",
+				description: error.message || "An error occurred while unstaking.",
+				variant: "destructive",
+			});
 			return false;
 		}
 	};
 
 	const claimRewards = async (): Promise<boolean> => {
-		if (!isConnected || !account) return false;
+		if (!isConnected || !address) return false;
 
 		try {
-			const provider = new ethers.BrowserProvider(window.ethereum);
-			const signer = await provider.getSigner();
-			const contract = new ethers.Contract(CONTRACT_ADDRESS, STAKING_ABI, signer);
+			await writeContractAsync({
+				address: CONTRACT_ADDRESS,
+				abi: STAKING_ABI,
+				functionName: "claim",
+				args: [],
+			});
 
-			const tx = await contract.claim();
-			await tx.wait();
+			toast({
+				title: "Rewards Claimed!",
+				description: "Your rewards have been claimed successfully.",
+			});
 
-			await updateBalance(account);
+			// Refetch data
+			refetchPositionIds();
+			refetchPositions();
+			refetchRewards();
+
 			return true;
-		} catch (error) {
-			console.error("Error claiming rewards:", error);
+		} catch (error: any) {
+			console.error("Claim error:", error);
+			toast({
+				title: "Claim Failed",
+				description: error.message || "An error occurred while claiming rewards.",
+				variant: "destructive",
+			});
 			return false;
 		}
 	};
 
-	const getUserPositions = async (): Promise<any[]> => {
-		if (!isConnected || !account) return [];
+	const getUserPositions = async () => {
+		if (!isConnected || !address) return [];
 
 		try {
-			const provider = new ethers.BrowserProvider(window.ethereum);
-			const contract = new ethers.Contract(
-				CONTRACT_ADDRESS,
-				STAKING_ABI,
-				provider
-			);
+			const { data: positions } = useReadContract({
+				address: CONTRACT_ADDRESS,
+				abi: STAKING_ABI,
+				functionName: "getPosition",
+				args: address ? [address] : undefined,
+				query: {
+					enabled: !!address,
+				},
+			});
 
-			// Get all position IDs for the user
-			const positionIds: bigint[] = await contract.userPositions(account);
-
-			const fetchedPositions = await Promise.all(
-				positionIds.map(async (id: bigint) => {
-					const pos = await contract.positions(id); // Fetch individual position details by ID
-					const amountInTokens = ethers.formatEther(pos.amount);
-
-					return {
-						id: id.toString(), // Use the actual position ID
-						amount: amountInTokens,
-						unlockTime: Number(pos.unlockTime),
-						multiplierBps: Number(pos.multiplierBps),
-						duration: Number(pos.duration), // New field
-						active: pos.active,
-						plan: Number(pos.plan),
-						rewards: "0.0000", // Rewards are fetched globally, not per position from contract
-					};
-				})
-			);
-
-			return fetchedPositions;
+			return positions;
 		} catch (error) {
 			console.error("Error fetching positions:", error);
-			return []; // Return empty array on error
+			return [];
 		}
 	};
 
-	const getPendingRewards = async (): Promise<string> => {
-		if (!isConnected || !account) return "0";
-
-		try {
-			const provider = new ethers.BrowserProvider(window.ethereum);
-			const contract = new ethers.Contract(
-				CONTRACT_ADDRESS,
-				STAKING_ABI,
-				provider
-			);
-
-			const rewards = await contract.pendingRewards(account);
-			const formattedRewards = ethers.formatEther(rewards); // Convert from wei to tokens
-			return Number(formattedRewards).toFixed(4);
-		} catch (error) {
-			console.error("Error fetching pending rewards:", error);
-			return "0"; // Default to 0 on error
-		}
-	};
-
-	useEffect(() => {
-		if (typeof window !== "undefined" && window.ethereum) {
-			// Check if already connected
-			window.ethereum
-				.request({ method: "eth_accounts" })
-				.then((accounts: string[]) => {
-					if (accounts.length > 0) {
-						setAccount(accounts[0]);
-						setIsConnected(true);
-						checkNetwork();
-						updateBalance(accounts[0]);
-					}
-				});
-
-			// Listen for account changes
-			window.ethereum.on("accountsChanged", (accounts: string[]) => {
-				if (accounts.length > 0) {
-					setAccount(accounts[0]);
-					setIsConnected(true);
-					updateBalance(accounts[0]);
-				} else {
-					disconnect();
-				}
-			});
-
-			// Listen for network changes
-			window.ethereum.on("chainChanged", () => {
-				checkNetwork();
-			});
-		}
-	}, []);
-
-	const value: Web3ContextType = {
+	return {
 		isConnected,
-		account,
-		balance,
-		isOnMonad,
-		connect,
-		disconnect,
+		account: address,
+		balance: balance ? formatEther(balance as bigint) : "0",
 		stakeTokens,
 		unstakeTokens,
 		claimRewards,
 		getUserPositions,
-		getPendingRewards,
-		switchToMonad,
+		getPendingRewards: () =>
+			pendingRewards ? formatEther(pendingRewards as bigint) : "0",
+		isLoading: isPending || isConfirming,
+		userPositionIds: (userPositionIds as bigint[]) || [],
+		pendingRewards: pendingRewards ? formatEther(pendingRewards as bigint) : "0",
+		positions,
+		refetchPositionIds,
+		refetchPositions,
+		refetchRewards,
 	};
-
-	return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;
-}
-
-export function useWeb3() {
-	const context = useContext(Web3Context);
-	if (context === undefined) {
-		throw new Error("useWeb3 must be used within a Web3Provider");
-	}
-	return context;
 }

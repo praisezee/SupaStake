@@ -4,7 +4,7 @@
 	"display": "standalone",
 	"scope": "/",
 	"start_url": "/",
-	"name": "SupaDao",
+	"name": "SupaStake: SupaDao official staking platform",
 	"short_name": "SupaStake",
 	"description": "A Progressive Web App for staking SupaCoin Token a native for SupaDao.",
 	"icons": [

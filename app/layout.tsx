@@ -4,8 +4,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
-import { Web3Provider } from "@/components/web3-provider";
 import { InstallPrompt } from "@/components/install-prompt";
+import { Providers } from "@/components/providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -17,6 +17,7 @@ export const metadata: Metadata = {
 	icons: {
 		icon: "/supadao-logo.png",
 	},
+	generator: "v0.dev",
 };
 
 export default function RootLayout({
@@ -32,9 +33,11 @@ export default function RootLayout({
 					defaultTheme="dark"
 					enableSystem
 					disableTransitionOnChange>
-					<Web3Provider>{children}</Web3Provider>
-					<Toaster />
-					<InstallPrompt />
+					<Providers>
+						{children}
+						<Toaster />
+						<InstallPrompt />
+					</Providers>
 				</ThemeProvider>
 			</body>
 		</html>

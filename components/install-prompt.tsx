@@ -1,70 +1,71 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import { Sparkles } from "lucide-react";
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Download, X } from "lucide-react"
 
 export function InstallPrompt() {
-	const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-	const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
 
-	useEffect(() => {
-		const handler = (e: Event) => {
-			e.preventDefault();
-			setDeferredPrompt(e);
-			setIsDialogOpen(true);
-		};
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowPrompt(true)
+    }
 
-		window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("beforeinstallprompt", handler)
 
-		return () => {
-			window.removeEventListener("beforeinstallprompt", handler);
-		};
-	}, []);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler)
+    }
+  }, [])
 
-	const handleInstallClick = async () => {
-		if (deferredPrompt) {
-			deferredPrompt.prompt();
-			const { outcome } = await deferredPrompt.userChoice;
-			if (outcome === "accepted") {
-				console.log("User accepted the install prompt");
-			} else {
-				console.log("User dismissed the install prompt");
-			}
-			setDeferredPrompt(null);
-			setIsDialogOpen(false);
-		}
-	};
+  const handleInstall = async () => {
+    if (!deferredPrompt) return
 
-	return (
-		<Dialog
-			open={isDialogOpen}
-			onOpenChange={setIsDialogOpen}>
-			<DialogContent className="sm:max-w-[425px] glass-effect border-purple-500/30">
-				<DialogHeader>
-					<DialogTitle className="text-gradient-purple-lime">
-						Install SupaStake
-					</DialogTitle>
-					<DialogDescription className="text-muted-foreground">
-						Add SupaStake to your home screen for quick and easy access.
-					</DialogDescription>
-				</DialogHeader>
-				<div className="grid gap-4 py-4">
-					<Button
-						onClick={handleInstallClick}
-						className="gradient-purple-lime text-black font-semibold text-lg px-8 py-4 glow-purple">
-						<Sparkles className="w-5 h-5 mr-2" />
-						Install App
-					</Button>
-				</div>
-			</DialogContent>
-		</Dialog>
-	);
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+
+    if (outcome === "accepted") {
+      setDeferredPrompt(null)
+      setShowPrompt(false)
+    }
+  }
+
+  const handleDismiss = () => {
+    setShowPrompt(false)
+    setDeferredPrompt(null)
+  }
+
+  if (!showPrompt) return null
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+      <Card className="glass-effect border-purple-500/30">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <h3 className="font-semibold text-sm mb-1">Install SupaStake</h3>
+              <p className="text-xs text-muted-foreground mb-3">Install our app for a better experience</p>
+              <div className="flex gap-2">
+                <Button onClick={handleInstall} size="sm" className="gradient-purple-lime text-black font-semibold">
+                  <Download className="w-3 h-3 mr-1" />
+                  Install
+                </Button>
+                <Button onClick={handleDismiss} size="sm" variant="ghost" className="text-muted-foreground">
+                  Later
+                </Button>
+              </div>
+            </div>
+            <Button onClick={handleDismiss} size="sm" variant="ghost" className="p-1 h-auto text-muted-foreground">
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
