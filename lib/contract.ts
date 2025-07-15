@@ -1,7 +1,7 @@
 export const MONAD_CHAIN_ID = 10143; // Monad testnet chain ID
 export const MONAD_RPC_URL = "https://testnet-rpc.monad.xyz";
 
-export const CONTRACT_ADDRESS = "0xAfa6D686311556563Ae685bc53Fc75A027fBD975"; // Your actual contract address
+export const CONTRACT_ADDRESS = "0x24892b4F1e3d2F416f269623D3fbb5aD82eae87E"; // Your actual contract address
 export const SPC_TOKEN_ADDRESS = "0x27434C462E517aa89270dF4308Ca601612a09Cf0"; // Your actual SPC token address
 
 export const STAKING_PLANS = {
