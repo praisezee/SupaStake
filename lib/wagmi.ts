@@ -1,5 +1,16 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { connectorsForWallets, getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { defineChain } from "viem";
+import {
+	backpackWallet,
+	bitgetWallet,
+	ledgerWallet,
+	magicEdenWallet,
+	metaMaskWallet,
+	okxWallet,
+	phantomWallet,
+	rainbowWallet,
+	trustWallet,
+} from "@rainbow-me/rainbowkit/wallets";
 
 // Define Monad testnet
 const monadTestnet = defineChain({
@@ -31,4 +42,22 @@ export const config = getDefaultConfig({
 		"1d133a68-fe75-4c14-8064-d3255568fcee",
 	chains: [monadTestnet],
 	ssr: true,
+	wallets: [
+		{
+			groupName: "Recommended",
+			wallets: [metaMaskWallet, phantomWallet, backpackWallet],
+		},
+		{
+			groupName: "Popular",
+			wallets: [trustWallet, rainbowWallet, bitgetWallet, okxWallet],
+		},
+		{
+			groupName: "Ledger",
+			wallets: [ledgerWallet],
+		},
+		{
+			groupName: "Magic Eden",
+			wallets: [magicEdenWallet],
+		},
+	],
 });
